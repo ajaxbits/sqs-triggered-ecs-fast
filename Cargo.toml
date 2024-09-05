@@ -1,0 +1,16 @@
+[package]
+name = "fastest-ecs-scheduler"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.48.0"
+glommio = "0.9.0"
+serde_json = "1.0"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["signal"] }
+zip = "0.5.13"
+pyo3 = "0.22.2"
