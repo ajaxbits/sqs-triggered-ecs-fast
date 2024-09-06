@@ -8,42 +8,43 @@ const TARGET_DOWNLOAD_PATH: &str = "/tmp/lambda";
 const TARGET_ZIP_FILE_PATH: &str = "/tmp/lambda/function.zip";
 const TARGET_FUNCTION_ROOT_PATH: &str = "/tmp/lambda/python_function";
 
-async fn prep_function(s3_uri: &str) {
-    tokio::fs::create_dir_all(TARGET_DOWNLOAD_PATH)
-        .await
-        .unwrap();
-    fs::remove_dir_all(TARGET_FUNCTION_ROOT_PATH).ok();
-    fs::remove_dir_all("/tmp/sls-py-req").ok();
-
-    // Download and unzip
-    let config = aws_config::load_from_env().await;
-    let client = aws_sdk_s3::Client::new(&config);
-    let bucket_and_key: Vec<&str> = s3_uri.splitn(2, '/').collect();
-    let bucket = bucket_and_key[0];
-    let key = bucket_and_key[1];
-
-    let resp = client
-        .get_object()
-        .bucket(bucket)
-        .key(key)
-        .send()
-        .await
-        .expect("Failed to download S3 object");
-
-    let body = resp.body.collect().await.expect("Failed to read S3 object");
-    tokio::fs::write(TARGET_ZIP_FILE_PATH, body.into_bytes())
-        .await
-        .unwrap();
-
-    let file = File::open(TARGET_ZIP_FILE_PATH).unwrap();
-    let mut archive = zip::ZipArchive::new(file).unwrap();
-    archive.extract(TARGET_FUNCTION_ROOT_PATH).unwrap();
-}
-
+// fn prep_function(s3_uri: &str) {
+//     fs::create_dir_all(TARGET_DOWNLOAD_PATH).unwrap();
+//     fs::remove_dir_all(TARGET_FUNCTION_ROOT_PATH).ok();
+//     fs::remove_dir_all("/tmp/sls-py-req").ok();
+//
+//     // AWS sdk only uses tokio, which is annoying to work with.
+//     // Therefore, we make this async code sync for convenience.
+//     tokio::runtime::Handle::current().block_on(async {
+//         // Download and unzip
+//         let config = aws_config::load_from_env().await;
+//         let client = aws_sdk_s3::Client::new(&config);
+//         let bucket_and_key: Vec<&str> = s3_uri.splitn(2, '/').collect();
+//         let bucket = bucket_and_key[0];
+//         let key = bucket_and_key[1];
+//         let resp = client
+//             .get_object()
+//             .bucket(bucket)
+//             .key(key)
+//             .send()
+//             .await
+//             .expect("Failed to download S3 object");
+//
+//         let body = resp.body.collect().await.expect("Failed to read S3 object");
+//         tokio::fs::write(TARGET_ZIP_FILE_PATH, body.into_bytes())
+//             .await
+//             .unwrap();
+//     });
+//
+//     let file = File::open(TARGET_ZIP_FILE_PATH).unwrap();
+//     let mut archive = zip::ZipArchive::new(file).unwrap();
+//     archive.extract(TARGET_FUNCTION_ROOT_PATH).unwrap();
+// }
+//
 fn main() {
-    let function_zip_s3_uri = env::var("FUNCTION_ZIP_S3_URI").unwrap();
+    // let function_zip_s3_uri = env::var("FUNCTION_ZIP_S3_URI").unwrap();
 
-    tokio::runtime::Handle::current().block_on(prep_function(&function_zip_s3_uri));
+    // prep_function(&function_zip_s3_uri);
 
     // Get the number of physical cpus for a thread-per-core concurrency model
     let cpus = glommio::CpuSet::online()
@@ -71,9 +72,15 @@ fn main() {
 
                         pyo3::prepare_freethreaded_python();
                         Python::with_gil(|py| {
+                            let sys = py.import_bound("sys").unwrap();
+                            let path = sys.getattr("path").unwrap();
+                            path.call_method1("append", ("myvenv\\Lib\\site-packages",))
+                                .unwrap();
+
                             let module = PyModule::import_bound(py, module_name).unwrap();
                             let entrypoint = module.getattr(entrypoint_name).unwrap();
-                            entrypoint.call0().unwrap();
+                            let args = ("dummy", "dummy");
+                            entrypoint.call1(args).unwrap();
                         });
                     },
                     tq,
